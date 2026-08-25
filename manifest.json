@@ -1,0 +1,288 @@
+{
+  "id": "creation.observer",
+  "name": "ORBIT",
+  "version": "1.2.0",
+  "sdkVersion": "1.0",
+  "author": "Nova",
+  "description": "记录创造能量的起伏与触发因素，支持状态轨迹、重点观察、标签统计与趋势回顾，角色可按需查询。",
+  "icon": "IMG_0329.jpeg",
+  "entry": "index.html",
+  "permissions": [
+    "app.data.read",
+    "app.data.write",
+    "characters.read",
+    "ai.generate",
+    "memory.write",
+    "memory.suggest",
+    "chat.tools",
+    "tasks.schedule",
+    "ui.toast",
+    "ui.notification",
+    "notifications.write"
+  ],
+  "primaryTags": [],
+  "extensions": {
+    "chat": {
+      "tools": [
+        {
+          "id": "query-creation-records",
+          "name": "查询创造记录",
+          "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+          "parameterSchema": {
+            "type": "object",
+            "properties": {
+              "range": {
+                "type": "string",
+                "enum": [
+                  "7d",
+                  "30d",
+                  "all",
+                  "date",
+                  "tag"
+                ],
+                "description": "查询范围：7d=最近7天，30d=最近30天，all=全部，date=指定日期，tag=按标签"
+              },
+              "date": {
+                "type": "string",
+                "description": "range=date 时指定日期，格式 YYYY-MM-DD"
+              },
+              "tag": {
+                "type": "string",
+                "description": "range=tag 时指定标签名"
+              },
+              "highlightOnly": {
+                "type": "boolean",
+                "description": "true=只返回标记为重点观察的记录"
+              },
+              "status": {
+                "type": "string",
+                "description": "按创造状态过滤：very-down/down/stable/up/very-up"
+              },
+              "includeNote": {
+                "type": "boolean",
+                "description": "是否同时读取备注内容，默认false"
+              }
+            },
+            "required": [
+              "range"
+            ]
+          },
+          "visibility": "shared",
+          "handler": "queryCreationRecords"
+        },
+        {
+          "id": "suggest-pattern-consolidation",
+          "name": "建议沉淀创造模式",
+          "description": "当AI发现用户的创造能量存在长期模式（如某标签频繁触发↓或↑）时，调用此工具提出建议，等待用户确认后再沉淀为长期记忆。",
+          "parameterSchema": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "发现的具体模式描述"
+              },
+              "tag": {
+                "type": "string",
+                "description": "关联的标签"
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "上升",
+                  "下降"
+                ],
+                "description": "该标签对创造能量的总体影响方向"
+              },
+              "evidence": {
+                "type": "string",
+                "description": "支持该结论的数据依据"
+              }
+            },
+            "required": [
+              "pattern",
+              "tag",
+              "effect",
+              "evidence"
+            ]
+          },
+          "visibility": "shared",
+          "handler": "suggestPatternConsolidation"
+        }
+      ]
+    },
+    "tools": [
+      {
+        "id": "query-creation-records",
+        "name": "查询创造记录",
+        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+        "parameterSchema": {
+          "type": "object",
+          "properties": {
+            "range": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "all",
+                "date",
+                "tag"
+              ],
+              "description": "查询范围：7d=最近7天，30d=最近30天，all=全部，date=指定日期，tag=按标签"
+            },
+            "date": {
+              "type": "string",
+              "description": "range=date 时指定日期，格式 YYYY-MM-DD"
+            },
+            "tag": {
+              "type": "string",
+              "description": "range=tag 时指定标签名"
+            },
+            "highlightOnly": {
+              "type": "boolean",
+              "description": "true=只返回标记为重点观察的记录"
+            },
+            "status": {
+              "type": "string",
+              "description": "按创造状态过滤：very-down/down/stable/up/very-up"
+            },
+            "includeNote": {
+              "type": "boolean",
+              "description": "是否同时读取备注内容，默认false"
+            }
+          },
+          "required": [
+            "range"
+          ]
+        },
+        "visibility": "shared",
+        "handler": "queryCreationRecords"
+      },
+      {
+        "id": "suggest-pattern-consolidation",
+        "name": "建议沉淀创造模式",
+        "description": "当AI发现用户的创造能量存在长期模式（如某标签频繁触发↓或↑）时，调用此工具提出建议，等待用户确认后再沉淀为长期记忆。",
+        "parameterSchema": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "发现的具体模式描述"
+            },
+            "tag": {
+              "type": "string",
+              "description": "关联的标签"
+            },
+            "effect": {
+              "type": "string",
+              "enum": [
+                "上升",
+                "下降"
+              ],
+              "description": "该标签对创造能量的总体影响方向"
+            },
+            "evidence": {
+              "type": "string",
+              "description": "支持该结论的数据依据"
+            }
+          },
+          "required": [
+            "pattern",
+            "tag",
+            "effect",
+            "evidence"
+          ]
+        },
+        "visibility": "shared",
+        "handler": "suggestPatternConsolidation"
+      }
+    ]
+  },
+  "chatExtensions": {
+    "tools": [
+      {
+        "id": "query-creation-records",
+        "name": "查询创造记录",
+        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+        "parameterSchema": {
+          "type": "object",
+          "properties": {
+            "range": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "all",
+                "date",
+                "tag"
+              ],
+              "description": "查询范围：7d=最近7天，30d=最近30天，all=全部，date=指定日期，tag=按标签"
+            },
+            "date": {
+              "type": "string",
+              "description": "range=date 时指定日期，格式 YYYY-MM-DD"
+            },
+            "tag": {
+              "type": "string",
+              "description": "range=tag 时指定标签名"
+            },
+            "highlightOnly": {
+              "type": "boolean",
+              "description": "true=只返回标记为重点观察的记录"
+            },
+            "status": {
+              "type": "string",
+              "description": "按创造状态过滤：very-down/down/stable/up/very-up"
+            },
+            "includeNote": {
+              "type": "boolean",
+              "description": "是否同时读取备注内容，默认false"
+            }
+          },
+          "required": [
+            "range"
+          ]
+        },
+        "visibility": "shared",
+        "handler": "queryCreationRecords"
+      },
+      {
+        "id": "suggest-pattern-consolidation",
+        "name": "建议沉淀创造模式",
+        "description": "当AI发现用户的创造能量存在长期模式（如某标签频繁触发↓或↑）时，调用此工具提出建议，等待用户确认后再沉淀为长期记忆。",
+        "parameterSchema": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "发现的具体模式描述"
+            },
+            "tag": {
+              "type": "string",
+              "description": "关联的标签"
+            },
+            "effect": {
+              "type": "string",
+              "enum": [
+                "上升",
+                "下降"
+              ],
+              "description": "该标签对创造能量的总体影响方向"
+            },
+            "evidence": {
+              "type": "string",
+              "description": "支持该结论的数据依据"
+            }
+          },
+          "required": [
+            "pattern",
+            "tag",
+            "effect",
+            "evidence"
+          ]
+        },
+        "visibility": "shared",
+        "handler": "suggestPatternConsolidation"
+      }
+    ]
+  }
+}
