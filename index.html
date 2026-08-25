@@ -160,8 +160,13 @@
       display: flex; align-items: center; justify-content: space-between;
       padding: var(--sp-4) var(--sp-3);
       margin-bottom: var(--sp-3);
+      position: relative;
     }
-    .cal-head .month { font-size: 17px; font-weight: 600; }
+    .cal-head .month {
+      font-size: 17px; font-weight: 600;
+      position: absolute; left: 50%; transform: translateX(-50%);
+      white-space: nowrap;
+    }
     .cal-nav {
       display: flex; gap: var(--sp-2);
     }
@@ -254,6 +259,13 @@
     }
     .day-head .date { font-size: 18px; font-weight: 600; }
     .day-head .sub { font-size: 12px; color: var(--color-text-3); margin-top: 2px; }
+    .day-nav-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: none; background: var(--color-accent-soft); color: var(--color-accent-strong);
+      font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .day-nav-btn:active { opacity: 0.6; }
 
     /* 记录卡片 */
     .record {
@@ -384,20 +396,21 @@
 
     /* 分段控件（全部/本月/本周）：更宽、更扁 */
     .seg {
-      display: flex; background: var(--color-surface-3); border-radius: var(--radius-sm); padding: 2px;
-      gap: 2px;
+      display: flex; background: var(--color-surface-3); border-radius: 10px; padding: 3px 4px;
+      gap: 4px; flex: 1; min-width: 190px; max-width: 250px; margin-left: 10px;
     }
     .seg button {
-      flex: 1; border: none; background: transparent; padding: 5px 0; border-radius: 7px;
-      font-size: 13px; color: var(--color-text-2); cursor: pointer; font-family: inherit;
+      flex: 1; border: none; background: transparent; padding: 4px 0; border-radius: 7px;
+      font-size: 12.5px; color: var(--color-text-2); cursor: pointer; font-family: inherit;
     }
     .seg button.sel { background: var(--color-surface); color: var(--color-text-1); font-weight: 600; box-shadow: var(--shadow-sm); }
 
-    .bar-row { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
     .bar-lbl { width: 52px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+    .bar-count { width: 44px; font-size: 12px; color: var(--text-3); flex-shrink: 0; font-variant-numeric: tabular-nums; }
     .bar-track { flex: 1; height: 8px; border-radius: 4px; background: var(--color-surface-3); overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 4px; background: var(--color-accent-strong); transition: width 0.3s; }
-    .bar-num { width: 40px; text-align: right; font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+    .bar-pct { width: 42px; text-align: right; font-size: 12px; color: var(--text-2); flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 
     .tag-stat-row {
       display: flex; align-items: center; gap: 10px; padding: 10px 0;
@@ -457,7 +470,7 @@
           </div>
         </div>
         <div class="cal-week">
-          <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+          <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
         </div>
         <div class="cal-grid" id="calendarGrid"></div>
       </div>
@@ -467,11 +480,13 @@
     <div class="page" id="page-today">
       <div class="page-scroll">
         <div class="day-head">
-          <div>
+          <button class="day-nav-btn" id="prevDayBtn" aria-label="上一天">‹</button>
+          <div style="flex:1; text-align:center; min-width:0;">
             <div class="date" id="todayDate"></div>
             <div class="sub" id="todayCount"></div>
           </div>
-          <button class="btn btn-soft btn-sm" id="addRecordBtn">+ 新增观测</button>
+          <button class="day-nav-btn" id="nextDayBtn" aria-label="下一天">›</button>
+          <button class="btn btn-soft btn-sm" id="addRecordBtn" style="margin-left:10px;">+ 新增观测</button>
         </div>
         <div id="todayRecords"></div>
       </div>
@@ -567,12 +582,15 @@
 
       <div class="stat-title" style="margin: 4px 4px 8px;">自定义样式</div>
       <div class="settings-group">
-        <div class="settings-row">
+        <div class="settings-row" style="border-bottom:none;">
           <span class="lbl">自定义 CSS</span>
         </div>
         <div style="padding: 0 0 14px;">
           <textarea id="customCSS" placeholder="/* 输入自定义 CSS 覆盖默认样式 */&#10;body { --primary: #8E4EC6; }" style="width:100%; border:1px solid var(--hairline); border-radius:12px; background:rgba(255,255,255,0.7); padding:12px; font-size:12px; font-family:Menlo, Monaco, monospace; min-height:120px; resize:vertical; outline:none; color:var(--text-1);"></textarea>
-          <button type="button" class="btn btn-soft btn-block" id="applyCSSBtn" style="margin-top:10px;">应用样式</button>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button type="button" class="btn btn-soft" id="cssExampleBtn" style="flex:1;">示例 CSS</button>
+            <button type="button" class="btn btn-soft" id="applyCSSBtn" style="flex:1;">应用样式</button>
+          </div>
         </div>
       </div>
 

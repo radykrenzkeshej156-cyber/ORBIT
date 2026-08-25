@@ -190,10 +190,12 @@ function renderCalendar() {
   grid.innerHTML = '';
 
   const firstDay = new Date(y, m, 1).getDay();
+  // 转为周一开头：周日=6，周一=0，周二=1…
+  const firstDayMon = firstDay === 0 ? 6 : firstDay - 1;
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const todayStr = getTodayStr();
 
-  for (let i = 0; i < firstDay; i++) {
+  for (let i = 0; i < firstDayMon; i++) {
     const empty = document.createElement('div');
     empty.style.cssText = 'min-width:0;';
     grid.appendChild(empty);
@@ -214,18 +216,20 @@ function renderCalendar() {
     star.className = 'day-star';
     star.textContent = recs.some(r => r.highlight) ? '★' : '';
 
-    // 状态轨迹：按时间顺序展示当天出现的不同状态（去重连续重复）
+    // 状态轨迹：按时间顺序展示当天出现的不同状态（去重连续重复，最多显示3个箭头）
     const trail = document.createElement('div');
     trail.className = 'day-trail';
     if (recs.length > 0) {
       const sorted = recs.slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-      let last = '', html = '';
+      let last = '', html = '', cnt = 0;
       sorted.forEach(r => {
         const meta = STATUS_META[r.status];
         if (!meta) return;
         if (meta.sym !== last) {
+          if (cnt >= 3) return; // 最多3个，更多的就不显示了
           html += `<span class="st-${r.status}">${meta.sym}</span>`;
           last = meta.sym;
+          cnt++;
         }
       });
       trail.innerHTML = html || '';
@@ -273,7 +277,7 @@ function renderToday() {
   if (recs.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.innerHTML = `<div class="icon">🌗</div>这一天没有观测记录<br>记录那些让能量明显变化、值得回看的时刻`;
+    empty.innerHTML = `<div class="icon">🌗</div>这一天没有观测记录`;
     container.appendChild(empty);
     return;
   }
@@ -304,6 +308,14 @@ function renderToday() {
   container.querySelectorAll('.edit-rec').forEach(btn => {
     btn.addEventListener('click', () => openRecordSheet(btn.dataset.id));
   });
+}
+
+// 当天页翻页：上一天 / 下一天
+function shiftToday(delta) {
+  const d = parseLocalDate(formatDate(state.selectedDate));
+  d.setDate(d.getDate() + delta);
+  state.selectedDate = d;
+  renderToday();
 }
 
 function escapeHtml(s) {
@@ -493,8 +505,9 @@ function renderStatusStats() {
     bars += `
       <div class="bar-row">
         <span class="bar-lbl st-${s}">${meta.sym}</span>
+        <span class="bar-count">${n} 次</span>
         <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:var(--st-${s});"></div></div>
-        <span class="bar-num">${n} · ${pct}%</span>
+        <span class="bar-pct">${pct}%</span>
       </div>`;
   });
 
@@ -730,15 +743,6 @@ function renderSettings() {
 // ============================================================================
 
 async function scheduleReminder() {
-  try {
-    // 先取消旧的
-    await API.tasks.schedule({
-      id: 'reminder_daily',
-      delayMs: 0,
-      actions: []
-    });
-  } catch (e) { /* 无旧任务 */ }
-
   if (!state.settings.reminderEnabled) return;
 
   const [h, m] = (state.settings.reminderTime || '21:00').split(':').map(Number);
@@ -747,6 +751,7 @@ async function scheduleReminder() {
   if (target <= now) target.setDate(target.getDate() + 1);
 
   try {
+    // 用唯一 id 覆盖旧任务
     await API.tasks.schedule({
       id: 'reminder_daily',
       delayMs: target.getTime() - now.getTime(),
@@ -759,7 +764,25 @@ async function scheduleReminder() {
         }
       ]
     });
-  } catch (e) { console.warn('scheduleReminder:', e); }
+  } catch (e) {
+    // 可能是同 id 重复任务被拒，用带时间戳的新 id 重试一次
+    try {
+      await API.tasks.schedule({
+        id: 'reminder_daily_' + Date.now(),
+        delayMs: target.getTime() - now.getTime(),
+        actions: [
+          {
+            type: 'notification',
+            title: '创造观测',
+            body: '回看今天：有什么值得观测的能量变化吗？',
+            badgeDelta: 1
+          }
+        ]
+      });
+    } catch (e2) {
+      console.warn('scheduleReminder retry:', e2);
+    }
+  }
 }
 
 // ============================================================================
@@ -920,6 +943,10 @@ function bindEvents() {
   // 新增观测（记录到当前查看的日期）
   $('#addRecordBtn').addEventListener('click', () => openRecordSheet());
 
+  // 当天页翻页：上一天 / 下一天
+  $('#prevDayBtn').addEventListener('click', () => shiftToday(-1));
+  $('#nextDayBtn').addEventListener('click', () => shiftToday(1));
+
   // 记录表单
   $('#recordForm').addEventListener('submit', handleRecordSubmit);
   $('#cancelRecordBtn').addEventListener('click', closeRecordSheet);
@@ -969,6 +996,30 @@ function bindEvents() {
     await scheduleReminder();
     await toast('提醒时间已更新');
   });
+  $('#cssExampleBtn').addEventListener('click', async () => {
+    // 提取当前自定义 CSS 或默认样式，填入输入框
+    const current = state.settings.customCSS || '';
+    const example = current || `/* ===== ORBIT 自定义样式示例 ===== */
+/* 修改主题色 */
+:root {
+  --color-accent-strong: #7C3AED;  /* 紫罗兰强调色 */
+  --color-bg: #FAFAFA;
+}
+
+/* 调整月历格子 */
+.cal-cell {
+  border-radius: 4px;
+}
+
+/* 修改标签样式 */
+.record-tag {
+  background: rgba(124, 58, 237, 0.1);
+  color: #7C3AED;
+}`;
+    $('#customCSS').value = example;
+    await API.ui.toast('已填入示例，点「应用样式」生效');
+  });
+
   $('#applyCSSBtn').addEventListener('click', async () => {
     state.settings.customCSS = $('#customCSS').value;
     applyCustomCSS(state.settings.customCSS);
