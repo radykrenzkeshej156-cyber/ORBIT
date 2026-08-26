@@ -546,7 +546,7 @@ function openRecordSheet(recordId = null) {
   $('#deleteRecordBtn').style.display = recordId ? 'block' : 'none';
 
   // 状态按钮
-  $('#statusPicker button').forEach(b => b.classList.remove('sel'));
+  $$('#statusPicker button').forEach(b => b.classList.remove('sel'));
 
   if (recordId) {
     // 查找记录（可能在任意日期，不止今天）
@@ -567,7 +567,7 @@ function openRecordSheet(recordId = null) {
         $('#creationDateField').style.display = 'block';
         $('#recordCreationDate').value = found.createdDate;
       }
-      $('#statusPicker button').forEach(b => {
+      $$('#statusPicker button').forEach(b => {
         if (b.dataset.status === found.status) b.classList.add('sel');
       });
     }
@@ -793,8 +793,6 @@ function renderStatusStats() {
     });
   });
 }
-
-
 
 function renderTagStats() {
   const card = $('#tagStats');
@@ -1068,6 +1066,8 @@ function renderTagLibrary() {
       <button class="btn btn-ghost btn-sm" data-act="rename" style="padding:4px 10px; font-size:12px;">重命名</button>
       ${gname !== DEFAULT_GROUP ? `<button class="btn btn-ghost btn-sm" data-act="delgroup" style="padding:4px 10px; font-size:12px; color:var(--color-danger);">删除</button>` : ''}
     `;
+    groupBlock.appendChild(head);
+
     // 分组上移/下移（替代拖拽）
     const gUp = head.querySelector('[data-act="gup"]');
     gUp.addEventListener('click', async () => {
@@ -1099,15 +1099,6 @@ function renderTagLibrary() {
       await saveGroups();
       renderTagLibrary();
     });
-    groupBlock.appendChild(head);
-
-    // 分组拖动排序
-    groupBlock.draggable = true;
-    groupBlock.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ gname }));
-      groupBlock.style.opacity = '0.5';
-    });
-    groupBlock.addEventListener('dragend', () => { groupBlock.style.opacity = '1'; });
 
     const tagList = document.createElement('div');
     tagList.className = 'tag-group-items';
@@ -1170,35 +1161,6 @@ function renderTagLibrary() {
           await toast('已删除标签');
         });
 
-        // 拖拽排序
-        row.draggable = true;
-        row.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/plain', JSON.stringify({ gname, tag }));
-          row.style.opacity = '0.5';
-        });
-        row.addEventListener('dragend', () => { row.style.opacity = '1'; });
-        // 作为放置目标时高亮
-        row.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          row.style.background = 'var(--color-accent-soft)';
-        });
-        row.addEventListener('dragleave', () => { row.style.background = 'var(--color-surface-2)'; });
-        row.addEventListener('drop', (e) => {
-          e.preventDefault();
-          row.style.background = 'var(--color-surface-2)';
-          try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.gname !== gname) return;
-            const items = state.groups[gname];
-            const from = items.indexOf(data.tag);
-            const to = items.indexOf(tag);
-            if (from < 0 || to < 0 || from === to) return;
-            items.splice(from, 1);
-            const newIdx = items.indexOf(tag);
-            items.splice(newIdx + 1, 0, data.tag);
-            saveGroups().then(() => renderTagLibrary());
-          } catch (err) {}
-        });
         tagList.appendChild(row);
       });
     }
@@ -1212,7 +1174,7 @@ function renderTagLibrary() {
       const oldName = gname;
       const headEl = head;
       // 把标题换成输入框
-      const nameSpan = headEl.querySelector('span:nth-child(2)');
+      const nameSpan = headEl.querySelector('span:nth-child(3)');
       const inp = document.createElement('input');
       inp.type = 'text';
       inp.value = oldName;
