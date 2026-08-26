@@ -271,8 +271,8 @@ function renderCalendar() {
 
     cell.appendChild(dayNum);
     cell.appendChild(star);
-    cell.appendChild(trail);
     cell.appendChild(pctEl);
+    cell.appendChild(trail);
     cell.appendChild(tags);
 
     cell.addEventListener('click', () => {
@@ -345,16 +345,16 @@ function renderCalFoot() {
     renderToday();
   });
 
-  // ✨ 输入能量百分比
+  // ✨ 输入能量百分比（内联 Bottom Sheet，避免沙箱 prompt 被拦截）
   $('#footEditPct').addEventListener('click', async (e) => {
     e.stopPropagation();
-    const val = await promptPct(pct != null ? pct : '');
-    if (val === null) return; // 取消
-    if (val === '') {
+    const result = await openPctSheet(pct != null ? pct : '');
+    if (result === null) return; // 取消
+    if (result === '') {
       delete state.energyPct[dateStr];
       await removeEnergyPct(dateStr);
     } else {
-      const n = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+      const n = Math.max(0, Math.min(100, parseInt(result, 10) || 0));
       state.energyPct[dateStr] = n;
       await saveEnergyPct(dateStr, n);
     }
@@ -375,11 +375,44 @@ function renderCalFoot() {
   });
 }
 
-// 用系统 prompt 输入 0-100 的百分比；返回字符串，取消返回 null
-function promptPct(current) {
+// 能量百分比输入 Bottom Sheet；resolve(null)=取消，resolve('')=清除，否则为字符串
+function openPctSheet(current) {
   return new Promise((resolve) => {
-    const v = window.prompt('创造能量百分比（0-100，留空清除）：', current);
-    resolve(v);
+    let mask = document.getElementById('pctSheet');
+    if (mask) mask.remove();
+    mask = document.createElement('div');
+    mask.className = 'sheet-mask open';
+    mask.id = 'pctSheet';
+    mask.innerHTML = `
+      <div class="sheet">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-title">创造能量百分比</div>
+        <div class="field">
+          <div class="field-label">输入 0-100 的数值（留空清除）</div>
+          <input type="number" id="pctInput" min="0" max="100" value="${current}" placeholder="如 60" style="width:100%; border:1px solid var(--color-border); border-radius:12px; background:var(--color-surface); padding:12px 14px; font-size:16px; outline:none;">
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button class="btn btn-ghost" id="pctCancel" style="flex:1;">取消</button>
+          <button class="btn btn-primary" id="pctSave" style="flex:1;">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.addEventListener('click', (e) => { if (e.target === mask) { mask.remove(); resolve(null); } });
+    $('#pctCancel').addEventListener('click', () => { mask.remove(); resolve(null); });
+    $('#pctSave').addEventListener('click', () => {
+      const v = $('#pctInput').value.trim();
+      mask.remove();
+      resolve(v);
+    });
+    const inp = $('#pctInput');
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const v = inp.value.trim();
+        mask.remove();
+        resolve(v);
+      }
+    });
+    setTimeout(() => inp.focus(), 100);
   });
 }
 
@@ -540,7 +573,13 @@ function openRecordSheet(recordId = null) {
     }
   }
 
-  renderTagPicker();
+  try {
+    renderTagPicker();
+  } catch (err) {
+    console.warn('renderTagPicker:', err);
+    // 标签分组异常不影响打开面板
+    $('#tagPicker').innerHTML = '<span style="font-size:13px;color:var(--text-3);">标签加载失败</span>';
+  }
   $('#recordSheet').classList.add('open');
 }
 
@@ -1023,11 +1062,43 @@ function renderTagLibrary() {
     const head = document.createElement('div');
     head.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 0;';
     head.innerHTML = `
-      <span style="cursor:move; color:var(--text-3);" class="grp-drag">⠿</span>
+      <button class="btn btn-ghost btn-sm" data-act="gup" style="padding:2px 7px; font-size:12px;" title="分组上移">↑</button>
+      <button class="btn btn-ghost btn-sm" data-act="gdown" style="padding:2px 7px; font-size:12px;" title="分组下移">↓</button>
       <span style="flex:1; font-weight:600; font-size:14px; color:var(--text-1);">${escapeHtml(gname)}</span>
       <button class="btn btn-ghost btn-sm" data-act="rename" style="padding:4px 10px; font-size:12px;">重命名</button>
       ${gname !== DEFAULT_GROUP ? `<button class="btn btn-ghost btn-sm" data-act="delgroup" style="padding:4px 10px; font-size:12px; color:var(--color-danger);">删除</button>` : ''}
     `;
+    // 分组上移/下移（替代拖拽）
+    const gUp = head.querySelector('[data-act="gup"]');
+    gUp.addEventListener('click', async () => {
+      const names = Object.keys(state.groups);
+      const idx = names.indexOf(gname);
+      if (idx <= 0) return;
+      const reordered = {};
+      names.forEach((n, i) => {
+        if (i === idx - 1) reordered[gname] = state.groups[gname];
+        else if (i === idx) reordered[names[i - 1]] = state.groups[names[i - 1]];
+        else reordered[n] = state.groups[n];
+      });
+      state.groups = reordered;
+      await saveGroups();
+      renderTagLibrary();
+    });
+    const gDown = head.querySelector('[data-act="gdown"]');
+    gDown.addEventListener('click', async () => {
+      const names = Object.keys(state.groups);
+      const idx = names.indexOf(gname);
+      if (idx < 0 || idx >= names.length - 1) return;
+      const reordered = {};
+      names.forEach((n, i) => {
+        if (i === idx) reordered[names[i + 1]] = state.groups[names[i + 1]];
+        else if (i === idx + 1) reordered[gname] = state.groups[gname];
+        else reordered[n] = state.groups[n];
+      });
+      state.groups = reordered;
+      await saveGroups();
+      renderTagLibrary();
+    });
     groupBlock.appendChild(head);
 
     // 分组拖动排序
@@ -1051,10 +1122,32 @@ function renderTagLibrary() {
         row.className = 'tag-group-item';
         row.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--color-surface-2); border-radius:8px; padding:6px 10px;';
         row.innerHTML = `
-          <span style="cursor:move; color:var(--text-3);">⠿</span>
+          <button class="btn btn-ghost btn-sm" data-act="up" style="padding:2px 7px; font-size:12px;" title="上移">↑</button>
+          <button class="btn btn-ghost btn-sm" data-act="down" style="padding:2px 7px; font-size:12px;" title="下移">↓</button>
           <span style="flex:1; font-size:13.5px;">${escapeHtml(tag)}</span>
           <button class="btn btn-ghost btn-sm" data-act="del" style="padding:3px 8px; font-size:11px; color:var(--color-danger);">删</button>
         `;
+        // 上移 / 下移（替代拖拽）
+        const moveUp = row.querySelector('[data-act="up"]');
+        moveUp.addEventListener('click', async () => {
+          const items = state.groups[gname];
+          const idx = items.indexOf(tag);
+          if (idx <= 0) return;
+          items.splice(idx, 1);
+          items.splice(idx - 1, 0, tag);
+          await saveGroups();
+          renderTagLibrary();
+        });
+        const moveDown = row.querySelector('[data-act="down"]');
+        moveDown.addEventListener('click', async () => {
+          const items = state.groups[gname];
+          const idx = items.indexOf(tag);
+          if (idx < 0 || idx >= items.length - 1) return;
+          items.splice(idx, 1);
+          items.splice(idx + 1, 0, tag);
+          await saveGroups();
+          renderTagLibrary();
+        });
         // 移到其他组
         const move = document.createElement('select');
         move.style.cssText = 'font-size:11px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface); padding:2px 4px;';
@@ -1316,6 +1409,74 @@ async function exportData() {
   await toast('已导出');
 }
 
+async function clearAllData() {
+  // 要求输入「删除」确认
+  const ok = await openConfirmSheet('确认清除所有数据？', '输入「删除」以确认，此操作不可恢复。', '删除');
+  if (!ok) return;
+  try {
+    // 清空所有数据集合
+    const cols = ['records', 'tags', 'groups', 'energy_pct', 'daily_summaries', 'pattern_suggestions', 'settings'];
+    for (const col of cols) {
+      try {
+        const list = await API.db.list(col, { limit: 100000 });
+        for (const it of list) {
+          try { await API.db.delete(col, it.id); } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    // 重置内存状态
+    state.records = {};
+    state.tags = [];
+    state.groups = {};
+    state.energyPct = {};
+    state.settings = { reminderEnabled: true, reminderTime: '21:00', customCSS: '' };
+    state.selectedCalDate = null;
+    await saveSettings();
+    renderAll();
+    await toast('已清除所有数据');
+  } catch (err) {
+    await toast('清除失败：' + err.message);
+  }
+}
+
+// 确认输入 Sheet：要求用户输入指定文字才能确认
+function openConfirmSheet(title, message, requiredText) {
+  return new Promise((resolve) => {
+    let mask = document.getElementById('confirmSheet');
+    if (mask) mask.remove();
+    mask = document.createElement('div');
+    mask.className = 'sheet-mask open';
+    mask.id = 'confirmSheet';
+    mask.innerHTML = `
+      <div class="sheet">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-title">${escapeHtml(title)}</div>
+        <div style="font-size:13px; color:var(--text-2); padding:4px 0 12px; line-height:1.6;">${escapeHtml(message)}</div>
+        <div class="field">
+          <input type="text" id="confirmInput" placeholder="请输入「${escapeHtml(requiredText)}」" style="width:100%; border:1px solid var(--color-border); border-radius:12px; background:var(--color-surface); padding:12px 14px; font-size:15px; outline:none;">
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-ghost" id="confirmCancel" style="flex:1;">取消</button>
+          <button class="btn btn-danger" id="confirmOk" style="flex:1;" disabled>确认清除</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    mask.addEventListener('click', (e) => { if (e.target === mask) { mask.remove(); resolve(false); } });
+    $('#confirmCancel').addEventListener('click', () => { mask.remove(); resolve(false); });
+    const input = $('#confirmInput');
+    const okBtn = $('#confirmOk');
+    input.addEventListener('input', () => {
+      okBtn.disabled = input.value.trim() !== requiredText;
+    });
+    okBtn.addEventListener('click', () => {
+      if (input.value.trim() !== requiredText) return;
+      mask.remove();
+      resolve(true);
+    });
+    setTimeout(() => input.focus(), 100);
+  });
+}
+
 async function importData() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -1491,6 +1652,7 @@ function bindEvents() {
   });
   $('#exportDataBtn').addEventListener('click', exportData);
   $('#importDataBtn').addEventListener('click', importData);
+  $('#clearAllDataBtn').addEventListener('click', clearAllData);
 }
 
 async function toast(msg) {
