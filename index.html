@@ -219,11 +219,16 @@
       border: 2px solid var(--color-accent-strong);
       background: var(--color-surface);
     }
+    .cal-cell.is-selected {
+      border: 1.5px solid var(--color-accent-strong);
+      background: var(--color-surface-2);
+    }
     .cal-cell .day-pct {
       font-size: 8.5px; font-weight: 600; line-height: 1.1;
       margin-top: 1px; text-align: center; min-height: 9px;
-      color: var(--color-accent-strong);
     }
+    .cal-cell .day-pct.pct-low { color: #B0B0B4; }
+    .cal-cell .day-pct.pct-high { color: #4A4A4E; }
     .cal-cell .day-star {
       font-size: 9px; color: var(--star); line-height: 1; min-height: 10px;
       margin-top: 1px;
@@ -283,19 +288,21 @@
     .cal-foot-rec .sym { font-size: 15px; font-weight: 700; width: 34px; text-align: center; flex-shrink: 0; }
     .cal-foot-rec .tags { flex: 1; font-size: 12.5px; color: var(--color-text-2); display: flex; flex-wrap: wrap; gap: 4px; }
     .cal-foot-rec .tags .tg { background: var(--color-accent-soft); padding: 2px 8px; border-radius: 999px; }
-    .cal-foot-actions {
-      display: flex; gap: 8px; margin-top: var(--sp-3);
+    .cal-foot-editpct {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: none; background: var(--color-accent-soft); color: var(--color-text-2);
+      font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
-    .cal-foot-actions .btn { flex: 1; }
-
-    /* 手动能量百分比编辑 */
-    .pct-row {
-      display: flex; align-items: center; gap: 10px; margin-top: var(--sp-3);
-      padding-top: var(--sp-3); border-top: 1px solid var(--color-hairline);
+    .cal-foot-editpct:active { background: var(--color-surface-3); }
+    .cal-foot-creation {
+      font-size: 12px; color: var(--text-3); margin-top: 8px; padding: 4px 0;
+      display: flex; align-items: center; gap: 6px;
     }
-    .pct-row .pct-lbl { font-size: 13px; color: var(--color-text-2); flex-shrink: 0; }
-    .pct-row input[type="range"] { flex: 1; accent-color: var(--color-accent-strong); }
-    .pct-row .pct-val { font-size: 14px; font-weight: 700; min-width: 42px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+    .cal-foot-creation .jump {
+      background: var(--color-accent-soft); padding: 2px 8px; border-radius: 999px;
+      color: var(--color-accent-strong); cursor: pointer; font-size: 12px;
+    }
 
     /* 当天页头部 */
     .day-head {
@@ -582,6 +589,16 @@
           </label>
         </div>
         <div class="field">
+          <label class="switch-row" style="padding:0;">
+            <span class="lbl">💡 追溯创造</span>
+            <button type="button" class="switch" id="isCreation" aria-label="追溯创造"></button>
+          </label>
+          <div id="creationDateField" style="display:none; margin-top:8px;">
+            <div class="field-label">这件事是哪天创造的？</div>
+            <input type="date" id="recordCreationDate">
+          </div>
+        </div>
+        <div class="field">
           <div class="field-label">触发 / 来源</div>
           <div class="tag-picker" id="tagPicker"></div>
           <div class="tag-input-row">
@@ -621,7 +638,7 @@
         </div>
       </div>
 
-      <div class="stat-title" style="margin: 4px 4px 8px;">标签库（分组管理）</div>
+      <div class="stat-title" style="margin: 4px 4px 8px;">标签库</div>
       <div class="settings-group" id="tagGroupLibrary"></div>
 
       <div class="stat-title" style="margin: 4px 4px 8px;">自定义样式</div>

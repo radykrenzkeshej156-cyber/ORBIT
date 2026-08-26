@@ -26,11 +26,12 @@ let state = {
   tags: [],
   groups: {},       // groupName -> [tagName]
   energyPct: {},    // date -> 0..100 手动能量百分比
-  creations: {},    // date -> [ {id, desc, createdDate} ] 追溯的创造事件
   settings: { reminderEnabled: true, reminderTime: '21:00', customCSS: '' },
   editingId: null,  // 正在编辑的记录 id
   selectedTags: new Set(),
   selectedStatus: '',
+  isCreation: false,       // 记录表单中追溯创造开关
+  selectedCreationDate: '',// 记录表单中追溯创造日期
   statsRange: 'all' // all | month | week
 };
 
@@ -72,7 +73,6 @@ async function loadData() {
     const settingsList = await API.db.list('settings', { limit: 1 });
     const groupsList = await API.db.list('groups', { limit: 500 });
     const pctList = await API.db.list('energy_pct', { limit: 5000 });
-    const creationsList = await API.db.list('creations', { limit: 5000 });
 
     state.records = {};
     recordsList.forEach(it => {
@@ -90,12 +90,6 @@ async function loadData() {
 
     state.energyPct = {};
     pctList.forEach(p => { state.energyPct[p.date] = p.pct; });
-
-    state.creations = {};
-    creationsList.forEach(c => {
-      if (!state.creations[c.date]) state.creations[c.date] = [];
-      state.creations[c.date].push(c);
-    });
 
     if (settingsList.length > 0) {
       state.settings = Object.assign(state.settings, settingsList[0]);
@@ -227,7 +221,9 @@ function renderCalendar() {
     const recs = state.records[dateStr] || [];
 
     const cell = document.createElement('div');
-    cell.className = 'cal-cell' + (dateStr === todayStr ? ' is-today' : '');
+    cell.className = 'cal-cell'
+      + (dateStr === todayStr ? ' is-today' : '')
+      + (state.selectedCalDate === dateStr ? ' is-selected' : '');
 
     const dayNum = document.createElement('div');
     dayNum.className = 'day-num' + (dateStr === todayStr ? ' today' : '');
@@ -264,14 +260,13 @@ function renderCalendar() {
       tags.textContent = allTags.length > 1 ? allTags.slice(0, 1).join('') + `+${allTags.length - 1}` : (allTags[0] || '');
     }
 
-    // 手动能量百分比（数值越大颜色越深）
+    // 手动能量百分比：0-49%浅灰，50-100%深灰，显示在日期和箭头之间
     const pct = state.energyPct[dateStr];
     const pctEl = document.createElement('div');
     pctEl.className = 'day-pct';
     if (pct != null) {
       pctEl.textContent = pct + '%';
-      const shade = Math.round(200 - (pct / 100) * 170); // 越高越接近深色
-      pctEl.style.color = `hsl(${120 - (pct / 100) * 120}, 40%, ${shade}%)`; // 绿→红，深浅随数值
+      pctEl.classList.add(pct <= 49 ? 'pct-low' : 'pct-high');
     }
 
     cell.appendChild(dayNum);
@@ -304,10 +299,14 @@ function renderCalFoot() {
   foot.style.display = 'block';
   const recs = state.records[dateStr] || [];
   const pct = state.energyPct[dateStr];
-  const creations = state.creations[dateStr] || [];
+  // 追溯创造：记录上带 createdDate 的观测（本日发现它们源自更早某天）
+  const tracedRecs = recs.filter(r => r.createdDate);
 
   const mm = parseInt(dateStr.slice(5, 7), 10), dd = parseInt(dateStr.slice(8, 10), 10);
-  let html = `<div class="cal-foot-title">${mm}月${dd}日 <span class="sub">${recs.length} 条观测${pct != null ? ' · 能量 ' + pct + '%' : ''}</span></div>`;
+  let html = `<div class="cal-foot-title">
+    <span>${mm}月${dd}日</span>
+    <button class="cal-foot-editpct" id="footEditPct" aria-label="编辑创造能量">✨</button>
+  </div>`;
 
   if (recs.length === 0) {
     html += `<div class="cal-foot-empty">这一天没有观测记录</div>`;
@@ -324,84 +323,64 @@ function renderCalFoot() {
     });
   }
 
-  // 追溯的创造事件
-  if (creations.length > 0) {
-    html += `<div style="margin-top:10px; font-size:12px; color:var(--text-3);">💡 追溯到创造：</div>`;
-    creations.forEach(c => {
-      html += `<div class="cal-foot-rec" style="border-bottom:none; padding:5px 0;">
-        <span class="sym">💡</span>
-        <span class="tags">${escapeHtml(c.desc)}${c.createdDate ? ` <span class="tg" data-jump="${c.createdDate}" style="cursor:pointer; background:var(--color-accent-soft);">源自 ${c.createdDate}</span>` : ''}</span>
+  // 追溯的创造事件（本日观测标记为源自更早某天）
+  if (tracedRecs.length > 0) {
+    tracedRecs.forEach(r => {
+      html += `<div class="cal-foot-creation">
+        <span>💡</span>
+        <span>${escapeHtml((r.tags || []).join('、') || '观测')}</span>
+        ${r.createdDate ? `<span class="jump" data-jump="${r.createdDate}">源自 ${r.createdDate}</span>` : ''}
       </div>`;
     });
   }
 
-  // 操作按钮
-  html += `<div class="cal-foot-actions">
-    <button class="btn btn-soft btn-sm" id="footGoMoment">查看当天详情 →</button>
-  </div>`;
-
-  // 能量百分比手动编辑
-  html += `<div class="pct-row">
-    <span class="pct-lbl">创造能量</span>
-    <input type="range" id="footPct" min="0" max="100" value="${pct != null ? pct : 0}">
-    <span class="pct-val" id="footPctVal">${pct != null ? pct : '—'}</span>
-  </div>
-  <div style="display:flex; gap:8px; margin-top:8px;">
-    <button class="btn btn-ghost btn-sm" id="footAddCreation" style="flex:1;">＋ 追溯一条创造</button>
-    <button class="btn btn-ghost btn-sm" id="footClearPct" style="flex:1;">清除能量</button>
-  </div>`;
-
   foot.innerHTML = html;
 
-  // 事件
-  $('#footGoMoment').addEventListener('click', () => {
+  // 点击预览板块 → 进入当天详情
+  foot.addEventListener('click', (e) => {
+    if (e.target.closest('#footEditPct')) return;
+    if (e.target.closest('[data-jump]')) return;
     state.selectedDate = parseLocalDate(dateStr);
     switchTab('today');
     renderToday();
   });
-  const pctInput = $('#footPct');
-  const pctVal = $('#footPctVal');
-  if (pctInput) {
-    pctInput.addEventListener('input', () => {
-      const v = pctInput.value;
-      pctVal.textContent = v;
-      pctVal.style.color = pctColor(v);
-    });
-    pctInput.addEventListener('change', async () => {
-      const v = parseInt(pctInput.value, 10);
-      state.energyPct[dateStr] = v;
-      await saveEnergyPct(dateStr, v);
-      renderCalendar();
-      renderCalFoot();
-      await toast('能量已保存');
-    });
-  }
-  $('#footClearPct').addEventListener('click', async () => {
-    delete state.energyPct[dateStr];
-    await removeEnergyPct(dateStr);
+
+  // ✨ 输入能量百分比
+  $('#footEditPct').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const val = await promptPct(pct != null ? pct : '');
+    if (val === null) return; // 取消
+    if (val === '') {
+      delete state.energyPct[dateStr];
+      await removeEnergyPct(dateStr);
+    } else {
+      const n = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+      state.energyPct[dateStr] = n;
+      await saveEnergyPct(dateStr, n);
+    }
     renderCalendar();
     renderCalFoot();
-    await toast('已清除能量');
+    await toast('能量已更新');
   });
-  $('#footAddCreation').addEventListener('click', () => openCreationSheet(dateStr));
 
-  // 追溯日期跳转
+  // 追溯日期跳转（跳到创造日）
   foot.querySelectorAll('[data-jump]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
       state.selectedDate = parseLocalDate(el.dataset.jump);
       state.selectedCalDate = el.dataset.jump;
-      switchTab('today');
-      renderToday();
+      renderCalendar();
+      renderCalFoot();
     });
   });
 }
 
-function pctColor(v) {
-  v = Math.max(0, Math.min(100, Number(v) || 0));
-  // 数值高 → 颜色深（红/深），数值低 → 颜色浅（浅绿）
-  const hue = 120 - (v / 100) * 120;
-  const light = 80 - (v / 100) * 45;
-  return `hsl(${hue}, 45%, ${light}%)`;
+// 用系统 prompt 输入 0-100 的百分比；返回字符串，取消返回 null
+function promptPct(current) {
+  return new Promise((resolve) => {
+    const v = window.prompt('创造能量百分比（0-100，留空清除）：', current);
+    resolve(v);
+  });
 }
 
 async function saveEnergyPct(date, pct) {
@@ -414,50 +393,6 @@ async function removeEnergyPct(date) {
   const list = await API.db.list('energy_pct', { limit: 5000 });
   const exist = list.find(p => p.date === date);
   if (exist) await API.db.delete('energy_pct', exist.id);
-}
-
-// 追溯创造事件的 Bottom Sheet
-function openCreationSheet(dateStr) {
-  let mask = document.getElementById('creationSheet');
-  if (mask) mask.remove();
-  mask = document.createElement('div');
-  mask.className = 'sheet-mask open';
-  mask.id = 'creationSheet';
-  mask.innerHTML = `
-    <div class="sheet">
-      <div class="sheet-grabber"></div>
-      <div class="sheet-title">追溯创造</div>
-      <div class="field">
-        <div class="field-label">发生了什么（事件描述）</div>
-        <input type="text" id="creationDesc" placeholder="例如：撞到了身体，好痛">
-      </div>
-      <div class="field">
-        <div class="field-label">这件事是哪天创造的？</div>
-        <input type="date" id="creationDate">
-      </div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-ghost" id="creationCancel" style="flex:1;">取消</button>
-        <button class="btn btn-primary" id="creationSave" style="flex:1;">保存</button>
-      </div>
-    </div>`;
-  document.body.appendChild(mask);
-  mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
-  $('#creationCancel').addEventListener('click', () => mask.remove());
-  $('#creationSave').addEventListener('click', async () => {
-    const desc = $('#creationDesc').value.trim();
-    const createdDate = $('#creationDate').value || '';
-    if (!desc) { await toast('请填写事件描述'); return; }
-    const rec = {
-      id: 'cr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      date: dateStr, desc, createdDate, createdAt: new Date().toISOString()
-    };
-    await API.db.create('creations', rec);
-    if (!state.creations[dateStr]) state.creations[dateStr] = [];
-    state.creations[dateStr].push(rec);
-    mask.remove();
-    renderCalFoot();
-    await toast('已追溯');
-  });
 }
 
 // ============================================================================
@@ -480,7 +415,7 @@ function renderToday() {
   if (recs.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.innerHTML = `<div class="icon">🌗</div>这一天没有观测记录`;
+    empty.innerHTML = `<div class="icon">🪐</div>这一天没有观测记录`;
     container.appendChild(empty);
   } else {
     const sorted = recs.slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -501,6 +436,7 @@ function renderToday() {
         </div>
         ${rec.tags && rec.tags.length ? `<div class="record-tags">${rec.tags.map(t => `<span class="record-tag">${t}</span>`).join('')}</div>` : ''}
         ${rec.note ? `<div class="record-note">${escapeHtml(rec.note)}</div>` : ''}
+        ${rec.createdDate ? `<div class="record-note" style="background:transparent; border:1px dashed var(--color-border); color:var(--text-2); font-size:12.5px;">💡 追溯创造 · 源自 <span class="jump" data-jump="${rec.createdDate}" style="color:var(--color-accent-strong); font-weight:600; cursor:pointer;">${rec.createdDate}</span></div>` : ''}
       `;
       container.appendChild(card);
     });
@@ -511,33 +447,30 @@ function renderToday() {
     });
   }
 
-  // 追溯的创造事件（当天发现某件事其实是更早某天创造的）
-  const creations = state.creations[dateStr] || [];
-  if (creations.length > 0) {
-    const crWrap = document.createElement('div');
-    crWrap.style.cssText = 'margin: 4px 8px 0;';
-    crWrap.innerHTML = `<div style="font-size:12px; color:var(--text-3); padding:4px 4px 6px;">💡 追溯到的创造</div>`;
-    creations.forEach(c => {
+  // 这一天是其他观测的「创造日」→ 显示🦋已创造（双向链接反向）
+  const butterflyRecs = [];
+  Object.entries(state.records).forEach(([d, arr]) => {
+    arr.forEach(r => {
+      if (r.createdDate === dateStr) butterflyRecs.push(Object.assign({ date: d }, r));
+    });
+  });
+  if (butterflyRecs.length > 0) {
+    const bfWrap = document.createElement('div');
+    bfWrap.style.cssText = 'margin: 4px 8px 0;';
+    bfWrap.innerHTML = `<div style="font-size:12px; color:var(--text-3); padding:4px 4px 6px;">🦋 这一天创造的事</div>`;
+    butterflyRecs.forEach(r => {
       const row = document.createElement('div');
       row.className = 'record';
       row.style.cssText = 'padding:10px 14px; margin:0 0 8px; display:flex; align-items:center; gap:10px;';
-      row.innerHTML = `<span>💡</span>
-        <span style="flex:1; font-size:13.5px;">${escapeHtml(c.desc)}</span>
-        ${c.createdDate ? `<button class="btn btn-ghost btn-sm" data-jump="${c.createdDate}" style="padding:4px 10px; font-size:12px;">源自 ${c.createdDate}</button>` : ''}`;
-      crWrap.appendChild(row);
+      row.innerHTML = `<span>🦋</span>
+        <span style="flex:1; font-size:13.5px;">${escapeHtml((r.tags || []).join('、') || '观测')}</span>
+        <button class="btn btn-ghost btn-sm" data-jump="${r.date}" style="padding:4px 10px; font-size:12px;">→ ${r.date}</button>`;
+      bfWrap.appendChild(row);
     });
-    container.appendChild(crWrap);
+    container.appendChild(bfWrap);
   }
 
-  // 「追溯创造」入口按钮
-  const addCr = document.createElement('button');
-  addCr.className = 'btn btn-ghost btn-block btn-sm';
-  addCr.style.cssText = 'margin: 4px 8px 12px; color:var(--color-accent-strong);';
-  addCr.textContent = '💡 追溯一条创造（某事源于更早的一天）';
-  addCr.addEventListener('click', () => openCreationSheet(dateStr));
-  container.appendChild(addCr);
-
-  // 追溯日期跳转
+  // 追溯日期跳转（源日期 / 创造日双向）
   container.querySelectorAll('[data-jump]').forEach(el => {
     el.addEventListener('click', () => {
       state.selectedDate = parseLocalDate(el.dataset.jump);
@@ -568,14 +501,19 @@ function openRecordSheet(recordId = null) {
   state.editingId = recordId;
   state.selectedTags = new Set();
   state.selectedStatus = '';
+  state.isCreation = false;
+  state.selectedCreationDate = '';
 
   $('#recordSheetTitle').textContent = recordId ? '编辑观测' : '新增观测';
   $('#recordNote').value = '';
   $('#isHighlight').classList.remove('on');
+  $('#isCreation').classList.remove('on');
+  $('#creationDateField').style.display = 'none';
+  $('#recordCreationDate').value = '';
   $('#deleteRecordBtn').style.display = recordId ? 'block' : 'none';
 
   // 状态按钮
-  $$('#statusPicker button').forEach(b => b.classList.remove('sel'));
+  $('#statusPicker button').forEach(b => b.classList.remove('sel'));
 
   if (recordId) {
     // 查找记录（可能在任意日期，不止今天）
@@ -589,7 +527,14 @@ function openRecordSheet(recordId = null) {
       state.selectedTags = new Set(found.tags || []);
       $('#recordNote').value = found.note || '';
       if (found.highlight) $('#isHighlight').classList.add('on');
-      $$('#statusPicker button').forEach(b => {
+      if (found.createdDate) {
+        state.isCreation = true;
+        state.selectedCreationDate = found.createdDate;
+        $('#isCreation').classList.add('on');
+        $('#creationDateField').style.display = 'block';
+        $('#recordCreationDate').value = found.createdDate;
+      }
+      $('#statusPicker button').forEach(b => {
         if (b.dataset.status === found.status) b.classList.add('sel');
       });
     }
@@ -690,6 +635,12 @@ async function handleRecordSubmit(e) {
     record.tags = Array.from(state.selectedTags);
     record.note = $('#recordNote').value.trim();
     record.highlight = $('#isHighlight').classList.contains('on');
+    // 追溯创造日期（双向链接）
+    if (state.isCreation && $('#recordCreationDate').value) {
+      record.createdDate = $('#recordCreationDate').value;
+    } else {
+      delete record.createdDate;
+    }
   } else {
     record = {
       date: dateStr,
@@ -699,6 +650,10 @@ async function handleRecordSubmit(e) {
       highlight: $('#isHighlight').classList.contains('on'),
       createdAt: new Date().toISOString()
     };
+    // 追溯创造日期
+    if (state.isCreation && $('#recordCreationDate').value) {
+      record.createdDate = $('#recordCreationDate').value;
+    }
   }
 
   try {
@@ -976,19 +931,24 @@ function groupOfTag(tag) {
 
 function ensureDefaultGroup() {
   if (!state.groups[DEFAULT_GROUP]) state.groups[DEFAULT_GROUP] = [];
-  // 未分组的标签归入默认分组
+  // 所有已被其他分组拥有的标签
   const grouped = new Set();
   Object.entries(state.groups).forEach(([g, tags]) => {
     if (g === DEFAULT_GROUP) return;
-    tags.forEach(t => grouped.add(t));
+    (tags || []).forEach(t => grouped.add(t));
   });
+  // 未分组标签（不属于任何非默认组）归入默认分组
   state.tags.forEach(t => {
     if (!grouped.has(t) && !state.groups[DEFAULT_GROUP].includes(t)) {
       state.groups[DEFAULT_GROUP].push(t);
     }
   });
-  // 默认分组里如果已有标签被移到其他组，清掉
+  // 默认分组里若已有标签被移到其他组，则移出默认分组
   state.groups[DEFAULT_GROUP] = state.groups[DEFAULT_GROUP].filter(t => state.tags.includes(t) && !grouped.has(t));
+  // 清理已删除的标签，避免脏数据
+  Object.keys(state.groups).forEach(g => {
+    state.groups[g] = (state.groups[g] || []).filter(t => state.tags.includes(t));
+  });
   // 默认分组为空则隐藏（渲染时跳过）
 }
 
@@ -1010,11 +970,28 @@ function renderTagLibrary() {
 
   const groupNames = Object.keys(state.groups);
 
-  // 添加分组按钮
+  // 添加分组按钮（不用 prompt，内联输入）
   const addGroupRow = document.createElement('div');
-  addGroupRow.style.cssText = 'padding:12px 0 4px;';
-  addGroupRow.innerHTML = `<button class="btn btn-ghost btn-sm" id="addGroupBtn" style="width:100%;">＋ 新建分组</button>`;
+  addGroupRow.style.cssText = 'padding:12px 0 4px; display:flex; gap:8px;';
+  addGroupRow.innerHTML = `
+    <input type="text" id="newGroupInput" placeholder="新分组名称" style="flex:1; border:1px solid var(--color-border); border-radius:8px; background:var(--color-surface); padding:9px 12px; font-size:13px; outline:none;">
+    <button class="btn btn-soft btn-sm" id="addGroupBtn" style="flex-shrink:0;">新建分组</button>`;
   wrap.appendChild(addGroupRow);
+  const ngi = $('#newGroupInput');
+  if (ngi) {
+    ngi.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const name = ngi.value.trim();
+        if (!name) return;
+        if (state.groups[name] !== undefined) { await toast('分组已存在'); return; }
+        state.groups[name] = [];
+        await saveGroups();
+        renderTagLibrary();
+        await toast('已新建分组');
+      }
+    });
+  }
 
   // 分组整体可上下拖动排序
   wrap.addEventListener('dragover', (e) => e.preventDefault());
@@ -1136,17 +1113,34 @@ function renderTagLibrary() {
     groupBlock.appendChild(tagList);
     wrap.appendChild(groupBlock);
 
-    // 分组操作
+    // 分组操作：重命名（内联输入，避免 prompt 在沙箱不生效）
     const renameBtn = head.querySelector('[data-act="rename"]');
-    if (renameBtn) renameBtn.addEventListener('click', async () => {
-      const name = prompt('新分组名：', gname);
-      if (!name || name === gname) return;
-      if (state.groups[name] !== undefined) { await toast('分组已存在'); return; }
-      state.groups[name] = state.groups[gname];
-      delete state.groups[gname];
-      await saveGroups();
-      renderTagLibrary();
-      await toast('已重命名');
+    if (renameBtn) renameBtn.addEventListener('click', () => {
+      const oldName = gname;
+      const headEl = head;
+      // 把标题换成输入框
+      const nameSpan = headEl.querySelector('span:nth-child(2)');
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = oldName;
+      inp.style.cssText = 'flex:1; font-size:14px; font-weight:600; border:1px solid var(--color-border); border-radius:8px; padding:4px 8px; background:var(--color-surface); outline:none; color:var(--text-1);';
+      nameSpan.replaceWith(inp);
+      renameBtn.textContent = '保存';
+      renameBtn.dataset.mode = 'save';
+      inp.focus();
+      const finish = async (doSave) => {
+        if (!doSave) { renderTagLibrary(); return; }
+        const name = inp.value.trim();
+        if (!name || name === oldName) { renderTagLibrary(); return; }
+        if (state.groups[name] !== undefined) { await toast('分组已存在'); renderTagLibrary(); return; }
+        state.groups[name] = state.groups[oldName];
+        delete state.groups[oldName];
+        await saveGroups();
+        renderTagLibrary();
+        await toast('已重命名');
+      };
+      renameBtn.onclick = () => finish(true);
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
     });
     const delBtn = head.querySelector('[data-act="delgroup"]');
     if (delBtn) delBtn.addEventListener('click', async () => {
@@ -1165,7 +1159,7 @@ function renderTagLibrary() {
   // 添加分组
   const addBtn = $('#addGroupBtn');
   if (addBtn) addBtn.addEventListener('click', async () => {
-    const name = prompt('新分组名称：');
+    const name = $('#newGroupInput').value.trim();
     if (!name) return;
     if (state.groups[name] !== undefined) { await toast('分组已存在'); return; }
     state.groups[name] = [];
@@ -1310,7 +1304,7 @@ function registerAITools() {
 // ============================================================================
 
 async function exportData() {
-  const data = { records: state.records, tags: state.tags, settings: state.settings, groups: state.groups, energyPct: state.energyPct, creations: state.creations };
+  const data = { records: state.records, tags: state.tags, settings: state.settings, groups: state.groups, energyPct: state.energyPct };
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1350,13 +1344,6 @@ async function importData() {
       if (data.energyPct) {
         for (const [date, pct] of Object.entries(data.energyPct)) {
           try { await API.db.create('energy_pct', { date, pct }); } catch (err) {}
-        }
-      }
-      if (data.creations) {
-        for (const [date, arr] of Object.entries(data.creations)) {
-          for (const c of arr) {
-            try { await API.db.create('creations', c); } catch (err) {}
-          }
         }
       }
       if (data.settings) { state.settings = Object.assign(state.settings, data.settings); await saveSettings(); }
@@ -1432,6 +1419,14 @@ function bindEvents() {
 
   // ★ 开关
   $('#isHighlight').addEventListener('click', () => $('#isHighlight').classList.toggle('on'));
+
+  // 💡 追溯创造开关
+  $('#isCreation').addEventListener('click', () => {
+    state.isCreation = !state.isCreation;
+    $('#isCreation').classList.toggle('on', state.isCreation);
+    $('#creationDateField').style.display = state.isCreation ? 'block' : 'none';
+    if (!state.isCreation) $('#recordCreationDate').value = '';
+  });
 
   // 新标签
   $('#addTagBtn').addEventListener('click', async () => {
