@@ -26,7 +26,7 @@ let state = {
   tags: [],
   groups: {},       // groupName -> [tagName]
   energyPct: {},    // date -> 0..100 手动能量百分比
-  settings: { reminderEnabled: true, reminderTime: '21:00', customCSS: '' },
+  settings: { reminderEnabled: true, reminderTime: '21:00', customCSS: '', bgImage: '' },
   editingId: null,  // 正在编辑的记录 id
   selectedTags: new Set(),
   selectedStatus: '',
@@ -95,6 +95,7 @@ async function loadData() {
       state.settings = Object.assign(state.settings, settingsList[0]);
     }
     applyCustomCSS(state.settings.customCSS);
+    applyBackgroundImage();
   } catch (e) {
     console.warn('loadData:', e);
   }
@@ -150,6 +151,70 @@ function applyCustomCSS(css) {
   let el = document.getElementById('custom-styles');
   if (!el) { el = document.createElement('style'); el.id = 'custom-styles'; document.head.appendChild(el); }
   el.textContent = css || '';
+}
+
+// ---------- 背景图 ----------
+let _bgResolvedUrl = '';   // 已解析为可加载地址的背景图缓存
+async function applyBackgroundImage() {
+  const ref = state.settings.bgImage || '';
+  let el = document.getElementById('bg-layer');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bg-layer';
+    el.style.cssText = 'position:fixed; inset:0; z-index:-1; pointer-events:none; background-size:cover; background-position:center;';
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  if (!ref) { _bgResolvedUrl = ''; el.style.backgroundImage = 'none'; document.body.classList.remove('has-bg'); return; }
+  // 相册图存的是 media-store 引用，需换回 dataURL 才能当背景
+  if (ref.startsWith('media-store://')) {
+    try {
+      const got = await API.media.get({ ref });
+      _bgResolvedUrl = got.dataUrl || '';
+    } catch (e) { _bgResolvedUrl = ''; console.warn('bg resolve:', e); }
+  } else {
+    _bgResolvedUrl = ref;
+  }
+  const ok = !!_bgResolvedUrl;
+  el.style.backgroundImage = ok ? `url("${_bgResolvedUrl.replace(/"/g, '')}")` : 'none';
+  document.body.classList.toggle('has-bg', ok);
+}
+
+async function pickBackgroundImage() {
+  try {
+    const picked = await API.media.pick({ accept: 'image/*' });
+    if (!picked || !picked.file || !picked.file.dataUrl) { await toast('未选择图片'); return; }
+    try {
+      const stored = await API.media.put({ dataUrl: picked.file.dataUrl });
+      state.settings.bgImage = stored.ref;
+    } catch (e) {
+      // media.put 失败时用原始 dataUrl 兜底（临时生效，不持久）
+      state.settings.bgImage = picked.file.dataUrl;
+    }
+    await saveSettings();
+    applyBackgroundImage();
+    renderSettings();
+    await toast('背景图已应用');
+  } catch (err) {
+    await toast('选择图片失败：' + (err.message || err));
+  }
+}
+
+async function applyBgUrl() {
+  const v = ($('#bgUrlInput') ? $('#bgUrlInput').value : '').trim();
+  if (!v) { await toast('请输入背景图链接'); return; }
+  state.settings.bgImage = v;
+  await saveSettings();
+  applyBackgroundImage();
+  renderSettings();
+  await toast('背景图已应用');
+}
+
+async function clearBackgroundImage() {
+  state.settings.bgImage = '';
+  if ($('#bgUrlInput')) $('#bgUrlInput').value = '';
+  await saveSettings();
+  applyBackgroundImage();
+  await toast('背景图已清除');
 }
 
 // ============================================================================
@@ -315,9 +380,11 @@ function renderCalFoot() {
     sorted.forEach(r => {
       const meta = STATUS_META[r.status] || { sym: r.status, label: r.status };
       const tags = (r.tags || []).map(t => `<span class="tg">${escapeHtml(t)}</span>`).join('');
+      const note = r.note ? `<span class="cal-foot-note" title="${escapeHtml(r.note)}">${escapeHtml(r.note)}</span>` : '';
       html += `<div class="cal-foot-rec">
         <span class="sym st-${r.status}">${meta.sym}</span>
         <span class="tags">${tags || '<span style="color:var(--text-3);">无标签</span>'}</span>
+        ${note}
         ${r.highlight ? '<span style="color:var(--star);">★</span>' : ''}
       </div>`;
     });
@@ -330,6 +397,21 @@ function renderCalFoot() {
         <span>💡</span>
         <span>${escapeHtml((r.tags || []).join('、') || '观测')}</span>
         ${r.createdDate ? `<span class="jump" data-jump="${r.createdDate}">源自 ${r.createdDate}</span>` : ''}
+      </div>`;
+    });
+  }
+
+  // 🦋 反向：这一天是其他观测的「创造日」（双向链接的另一端）
+  const butterflyRecs = [];
+  Object.entries(state.records).forEach(([d, arr]) => {
+    arr.forEach(r => { if (r.createdDate === dateStr) butterflyRecs.push(Object.assign({ date: d }, r)); });
+  });
+  if (butterflyRecs.length > 0) {
+    butterflyRecs.forEach(r => {
+      html += `<div class="cal-foot-creation">
+        <span>🦋</span>
+        <span>${escapeHtml((r.tags || []).join('、') || '观测')}</span>
+        <span class="jump" data-jump="${r.date}">创造于 ${r.date}</span>
       </div>`;
     });
   }
@@ -457,13 +539,10 @@ function renderToday() {
       const card = document.createElement('div');
       card.className = 'record' + (rec.highlight ? ' starred' : '');
 
-      const timeStr = rec.createdAt ? new Date(rec.createdAt).toTimeString().slice(0, 5) : '';
-
       card.innerHTML = `
         <div class="record-top">
           <span class="record-status st-${rec.status}">${meta.sym} <span style="font-size:13px; font-weight:500; color:var(--text-2);">${meta.label}</span>${rec.highlight ? '<span class="record-star">★</span>' : ''}</span>
           <div class="record-meta">
-            <span class="record-time">${timeStr}</span>
             <button class="btn btn-ghost btn-sm edit-rec" data-id="${rec.id}">编辑</button>
           </div>
         </div>
@@ -490,7 +569,7 @@ function renderToday() {
   if (butterflyRecs.length > 0) {
     const bfWrap = document.createElement('div');
     bfWrap.style.cssText = 'margin: 4px 8px 0;';
-    bfWrap.innerHTML = `<div style="font-size:12px; color:var(--text-3); padding:4px 4px 6px;">🦋 这一天创造的事</div>`;
+    bfWrap.innerHTML = `<div style="font-size:12px; color:var(--text-3); padding:4px 4px 6px;">这一天创造的事</div>`;
     butterflyRecs.forEach(r => {
       const row = document.createElement('div');
       row.className = 'record';
@@ -613,12 +692,12 @@ function renderTagPicker() {
     head.style.cssText = 'display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 0; user-select:none;';
     head.innerHTML = `<span style="font-size:13px; font-weight:600; color:var(--text-2); flex:1;">${escapeHtml(gname)}</span>
       <span style="font-size:11px; color:var(--text-3);" class="grp-cnt"></span>
-      <span style="font-size:11px; color:var(--text-3);">▸</span>`;
+      <span style="font-size:11px; color:var(--text-3);">▾</span>`;
     block.appendChild(head);
 
     const body = document.createElement('div');
     body.className = 'tag-picker-body';
-    body.style.cssText = 'display:none; flex-wrap:wrap; gap:6px; padding-top:4px;';
+    body.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; padding-top:4px;';
     gtags.forEach(tag => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -1115,8 +1194,9 @@ function renderTagLibrary() {
         row.innerHTML = `
           <button class="btn btn-ghost btn-sm" data-act="up" style="padding:2px 7px; font-size:12px;" title="上移">↑</button>
           <button class="btn btn-ghost btn-sm" data-act="down" style="padding:2px 7px; font-size:12px;" title="下移">↓</button>
-          <span style="flex:1; font-size:13.5px;">${escapeHtml(tag)}</span>
+          <span style="flex:1; font-size:13.5px;" class="tag-name">${escapeHtml(tag)}</span>
           <button class="btn btn-ghost btn-sm" data-act="del" style="padding:3px 8px; font-size:11px; color:var(--color-danger);">删</button>
+          <button class="btn btn-ghost btn-sm" data-act="rename" style="padding:3px 8px; font-size:11px;">名</button>
         `;
         // 上移 / 下移（替代拖拽）
         const moveUp = row.querySelector('[data-act="up"]');
@@ -1159,6 +1239,54 @@ function renderTagLibrary() {
           renderTagPicker();
           renderTagStats();
           await toast('已删除标签');
+        });
+
+        // 标签重命名（内联输入，改完后同步所有引用）
+        row.querySelector('[data-act="rename"]').addEventListener('click', async () => {
+          const nameSpan = row.querySelector('.tag-name');
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.value = tag;
+          inp.style.cssText = 'flex:1; font-size:13.5px; border:1px solid var(--color-border); border-radius:8px; padding:4px 8px; background:var(--color-surface); outline:none; color:var(--text-1); min-width:0;';
+          nameSpan.replaceWith(inp);
+          const btn = row.querySelector('[data-act="rename"]');
+          btn.textContent = '存';
+          inp.focus();
+          const finish = async (doSave) => {
+            if (!doSave) { renderTagLibrary(); return; }
+            const newName = inp.value.trim();
+            if (!newName || newName === tag) { renderTagLibrary(); return; }
+            if (state.tags.includes(newName)) { await toast('标签已存在'); renderTagLibrary(); return; }
+            // 重命名 tags 表
+            const tagsList = await API.db.list('tags', { limit: 1000 });
+            const titem = tagsList.find(t => t.name === tag);
+            if (titem) await API.db.update('tags', titem.id, { name: newName });
+            state.tags[state.tags.indexOf(tag)] = newName;
+            state.tags.sort((a, b) => a.localeCompare(b, 'zh'));
+            // 重命名分组里的引用
+            Object.keys(state.groups).forEach(g => {
+              const gi = state.groups[g].indexOf(tag);
+              if (gi >= 0) state.groups[g][gi] = newName;
+            });
+            await saveGroups();
+            // 重命名所有记录里的引用
+            const recList = await API.db.list('records', { limit: 10000 });
+            for (const rec of recList) {
+              if (rec.tags && rec.tags.includes(tag)) {
+                rec.tags = rec.tags.map(t => t === tag ? newName : t);
+                await API.db.update('records', rec.id, rec);
+              }
+            }
+            await reloadRecords();
+            ensureDefaultGroup();
+            renderTagLibrary();
+            renderTagPicker();
+            renderTagStats();
+            renderCalendar();
+            await toast('已重命名');
+          };
+          btn.onclick = () => finish(true);
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
         });
 
         tagList.appendChild(row);
@@ -1228,6 +1356,8 @@ function renderSettings() {
   $('#reminderEnabled').classList.toggle('on', !!state.settings.reminderEnabled);
   $('#reminderTime').value = state.settings.reminderTime || '21:00';
   $('#customCSS').value = state.settings.customCSS || '';
+  const bgInput = $('#bgUrlInput');
+  if (bgInput) bgInput.value = (state.settings.bgImage && !state.settings.bgImage.startsWith('media-store://')) ? state.settings.bgImage : '';
   renderTagLibrary();
 }
 
@@ -1391,7 +1521,7 @@ async function clearAllData() {
     state.tags = [];
     state.groups = {};
     state.energyPct = {};
-    state.settings = { reminderEnabled: true, reminderTime: '21:00', customCSS: '' };
+    state.settings = { reminderEnabled: true, reminderTime: '21:00', customCSS: '', bgImage: '' };
     state.selectedCalDate = null;
     await saveSettings();
     renderAll();
@@ -1568,6 +1698,11 @@ function bindEvents() {
   // 设置
   $('#settingsBtn').addEventListener('click', () => { renderSettings(); $('#settingsSheet').classList.add('open'); });
   $('#settingsSheet').addEventListener('click', (e) => { if (e.target === $('#settingsSheet')) $('#settingsSheet').classList.remove('open'); });
+
+  // 背景图
+  $('#pickBgBtn').addEventListener('click', pickBackgroundImage);
+  $('#applyBgBtn').addEventListener('click', applyBgUrl);
+  $('#clearBgBtn').addEventListener('click', clearBackgroundImage);
 
   $('#reminderEnabled').addEventListener('click', async () => {
     state.settings.reminderEnabled = !state.settings.reminderEnabled;
