@@ -411,7 +411,7 @@ function renderCalFoot() {
       html += `<div class="cal-foot-creation">
         <span>🦋</span>
         <span>${escapeHtml((r.tags || []).join('、') || '观测')}</span>
-        <span class="jump" data-jump="${r.date}">创造于 ${r.date}</span>
+        <span class="jump" data-jump="${r.date}">创造 ${r.date}</span>
       </div>`;
     });
   }

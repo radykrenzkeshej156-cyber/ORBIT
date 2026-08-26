@@ -18,7 +18,10 @@
     "tasks.schedule",
     "ui.toast",
     "ui.notification",
-    "notifications.write"
+    "notifications.write",
+    "media.pick",
+    "media.put",
+    "media.get"
   ],
   "primaryTags": [],
   "extensions": {
