@@ -161,7 +161,7 @@ async function applyBackgroundImage() {
   if (!el) {
     el = document.createElement('div');
     el.id = 'bg-layer';
-    el.style.cssText = 'position:fixed; inset:0; z-index:-1; pointer-events:none; background-size:cover; background-position:center;';
+    el.style.cssText = 'position:fixed; inset:0; z-index:0; pointer-events:none; background-size:cover; background-position:center;';
     document.body.insertBefore(el, document.body.firstChild);
   }
   if (!ref) { _bgResolvedUrl = ''; el.style.backgroundImage = 'none'; document.body.classList.remove('has-bg'); return; }
@@ -191,7 +191,7 @@ async function pickBackgroundImage() {
       state.settings.bgImage = picked.file.dataUrl;
     }
     await saveSettings();
-    applyBackgroundImage();
+    await applyBackgroundImage();
     renderSettings();
     await toast('背景图已应用');
   } catch (err) {
@@ -204,7 +204,7 @@ async function applyBgUrl() {
   if (!v) { await toast('请输入背景图链接'); return; }
   state.settings.bgImage = v;
   await saveSettings();
-  applyBackgroundImage();
+  await applyBackgroundImage();
   renderSettings();
   await toast('背景图已应用');
 }
@@ -213,7 +213,7 @@ async function clearBackgroundImage() {
   state.settings.bgImage = '';
   if ($('#bgUrlInput')) $('#bgUrlInput').value = '';
   await saveSettings();
-  applyBackgroundImage();
+  await applyBackgroundImage();
   await toast('背景图已清除');
 }
 
