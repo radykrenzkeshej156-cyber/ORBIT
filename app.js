@@ -242,19 +242,8 @@ ${hasHl ? '★ 含重点观察' : ''}`;
     else await API.db.create('daily_summaries', { date, text: summary, createdAt: new Date().toISOString() });
   } catch (e) { console.warn('summary save:', e); }
 
-  // 写入角色短期记忆（轻量，一条/天，不堆量）
-  if (state.characterId) {
-    try {
-      await API.memory.addTimeline({
-        characterId: state.characterId,
-        appLabel: '创造观测',
-        summary: `${date} 创造状态：${statuses.map(s => STATUS_META[s]?.sym || s).join('→')}`,
-        detail: 'daily_observation',
-        appEventId: `observation_${date}`,
-        data: { date, statuses, tags: allTags, hasHighlight: hasHl }
-      });
-    } catch (e) { console.warn('timeline:', e); }
-  }
+  // 不再被动写入角色短期记忆：角色未调用工具时看不到任何记录，
+  // 数据只在角色主动调用「查询创造记录」工具时返回
   return summary;
 }
 
@@ -1420,7 +1409,7 @@ function registerAITools() {
     const range = args.range || '7d';
     const tag = args.tag || '';
     const date = args.date || '';
-    const includeNote = !!args.includeNote;
+    const includeNote = args.includeNote !== false; // 默认带备注
     const highlightOnly = !!args.highlightOnly;
     const status = args.status || '';
 

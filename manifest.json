@@ -30,7 +30,7 @@
         {
           "id": "query-creation-records",
           "name": "查询创造记录",
-          "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+          "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认返回日期、状态、标签与备注（备注为空时省略）。",
           "parameterSchema": {
             "type": "object",
             "properties": {
@@ -63,7 +63,7 @@
               },
               "includeNote": {
                 "type": "boolean",
-                "description": "是否同时读取备注内容，默认false"
+                "description": "是否读取备注内容，默认 true（备注为空时省略）"
               }
             },
             "required": [
@@ -117,7 +117,7 @@
       {
         "id": "query-creation-records",
         "name": "查询创造记录",
-        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认返回日期、状态、标签与备注（备注为空时省略）。",
         "parameterSchema": {
           "type": "object",
           "properties": {
@@ -150,7 +150,7 @@
             },
             "includeNote": {
               "type": "boolean",
-              "description": "是否同时读取备注内容，默认false"
+              "description": "是否读取备注内容，默认 true（备注为空时省略）"
             }
           },
           "required": [
@@ -205,7 +205,7 @@
       {
         "id": "query-creation-records",
         "name": "查询创造记录",
-        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认只返回日期、状态、标签；需要理解具体原因时再设置 includeNote=true 读取备注。",
+        "description": "查询用户的创造能量观测记录。可按时间范围（7d=最近7天、30d=最近30天、all=全部）、指定日期（range=date 配合 date=YYYY-MM-DD）、标签（range=tag 配合 tag=标签名）查询；可只查重点观察（highlightOnly=true）或按创造状态过滤（status=very-down/down/stable/up/very-up）。默认返回日期、状态、标签与备注（备注为空时省略）。",
         "parameterSchema": {
           "type": "object",
           "properties": {
@@ -238,7 +238,7 @@
             },
             "includeNote": {
               "type": "boolean",
-              "description": "是否同时读取备注内容，默认false"
+              "description": "是否读取备注内容，默认 true（备注为空时省略）"
             }
           },
           "required": [
