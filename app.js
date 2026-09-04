@@ -1,5 +1,5 @@
 // ============================================================================
-// ORBIT v1.2 - 修复完善版
+// ORBIT v1.5 - 修复完善版
 // 数据结构保持兼容：records { id,date,status,highlight,tags[],note,createdAt }
 // ============================================================================
 
@@ -152,6 +152,114 @@ function applyCustomCSS(css) {
   if (!el) { el = document.createElement('style'); el.id = 'custom-styles'; document.head.appendChild(el); }
   el.textContent = css || '';
 }
+
+// 「AI 制作指南」全文：设置 → 自定义 CSS → AI 制作指南 按钮填入。
+// 目标：把这段指南单独发给任意 AI，AI 不读取任何仓库文件也能写出
+// 改变整个 APP 全局外观、可直接使用的自定义 CSS。
+const CSS_GUIDE = `/* ============================================================
+   ORBIT 全局美化 CSS · AI 制作指南（v1.5）
+   ------------------------------------------------------------
+   用法：把本指南整段发给任意 AI，并附一句
+   「请按指南为 ORBIT 写一份全局美化 CSS」，
+   AI 无需读取任何仓库文件即可写出可直接使用的主题。
+   拿到 CSS 后粘贴到本输入框，点「应用样式」全局生效。
+   ============================================================ */
+
+【一、运行机制（AI 必读）】
+1. 你的 CSS 会被注入为 <style id="custom-styles">，位于 ORBIT 全部内置样式之后：同选择器同优先级时你的规则必胜，一般无需 !important。
+2. 这是单页应用，共三个标签页：TRACE（月历）、MOMENT（当天）、ARC（统计），切换不刷新页面，所有节点常驻，直接写选择器即可。
+3. 设置、观测表单、各类确认框都是页面内固定定位的弹层，不是新文档。
+4. 只输出纯 CSS 规则；不要 @import、不要引用外部图片/字体、不要包含 HTML 或 JS。
+5. 优先改 :root 设计变量，其次按类名覆盖组件；保持移动端可读性（正文不小于 12px）。
+
+【二、设计变量（改 :root 即全局换装）】
+--color-bg 页面背景｜--color-surface 卡片/弹窗表面｜--color-surface-2 次级表面(输入框/内嵌)｜--color-surface-3 三级表面(分段控件底)
+--color-text-1 主文字｜--color-text-2 次级文字｜--color-text-3 弱化文字
+--color-accent 中性强调｜--color-accent-strong 主按钮/选中态/今日描边｜--color-accent-soft 强调淡底
+--color-border 卡片边框｜--color-hairline 细分隔线
+--color-danger / --color-danger-soft 危险按钮
+状态五档基础色（改这五个即可全局生效，月历箭头与统计条都会跟随）：
+  --st-vd ↓↓被限制｜--st-d ↓下降｜--st-s →平稳｜--st-u ↑流动｜--st-vu ↑↑高度创造
+  （等价别名 --st-very-down/--st-down/--st-stable/--st-up/--st-very-up，默认自动跟随基础档）
+--star ★重点观察的金色
+圆角：--radius-sm 8px｜--radius-md 12px｜--radius-lg 16px(卡片)｜--radius-xl 22px(弹窗顶角)
+阴影：--shadow-sm｜--shadow-md｜--shadow-lg(弹窗)
+间距：--sp-1 4px ~ --sp-6 28px｜字体：--font-ui｜动效：--ease 缓动、--dur 0.18s
+旧别名（兼容旧 CSS，仍有效）：--primary --primary-soft --text-1 --text-2 --text-3 --bg --glass --glass-strong --hairline --radius --shadow
+
+【三、组件类名清单】
+骨架：body｜.app 应用容器｜.topbar 顶栏｜.topbar h1 大标题｜.icon-btn 设置圆钮
+  .tabnav 标签分段控件｜.tabnav button.active 选中白块｜.page 页容器｜.page-scroll 滚动区
+月历：.glass 通用卡片面｜.cal-head 月份栏｜.cal-nav-btn 翻页圆钮｜.cal-week 星期表头｜.cal-grid 月网格
+  .cal-cell 日期格｜.cal-cell.is-today 今天｜.cal-cell.is-selected 选中
+  .cal-cell .day-num 日期数字｜.day-star ★行｜.day-pct 能量百分比｜.day-trail 箭头轨迹｜.day-tags 标签行
+  .cal-foot 选中日预览卡｜.cal-foot-rec 记录行｜.cal-foot-note 备注胶囊｜.cal-foot-creation 追溯行
+当天页：.day-head 日期头｜.day-nav-btn 翻日圆钮｜.record 观测卡｜.record.starred 重点卡
+  .record-status 状态行｜.record-tag 标签胶囊｜.record-note 备注块
+统计页：.stat-title 小标题｜.stat-card｜.seg 分段控件｜.seg button.sel｜.bar-row/.bar-track/.bar-fill 状态条
+  .tag-stat-row 标签统计行｜.hl-card 重点观察卡｜.link-btn 文字按钮
+按钮：.btn 基类｜.btn-primary 主按钮｜.btn-soft 浅底｜.btn-ghost 描边｜.btn-danger 危险｜.btn-block 通栏｜.btn-sm 小号
+弹窗：.sheet-mask 遮罩｜.sheet 弹窗面板｜.sheet-grabber 顶部横条｜.sheet-title 标题
+表单：.field｜.field-label｜.status-picker 五状态选择｜.tag-pick 标签胶囊｜.switch iOS 开关(.on 开态, ::after 滑块)
+  .settings-group 设置分组卡｜.settings-row 设置行
+其他：.empty 空状态｜#bg-layer 背景图层(fixed, z-index:0)｜body.has-bg 已设置背景图时的根标记
+安全区（宿主注入，勿改）：--ai-phone-app-safe-top / --ai-phone-app-safe-bottom
+
+【四、固定颜色位置（暗色/深色主题需单独覆盖）】
+.switch 底色固定浅灰｜.sheet-grabber 固定灰｜.cal-cell .day-pct.pct-low 与 .pct-high 固定灰阶
+.btn-primary 文字固定白色（深底时通常没问题，浅底时改深色）
+.record.starred 描边阴影为固定金色 rgba
+
+【五、背景图模式】
+设置背景图后 body 带 .has-bg，.app 背景透明，#bg-layer 铺底。
+毛玻璃做法：
+body.has-bg .glass,
+body.has-bg .record,
+body.has-bg .sheet { background: rgba(255,255,255,0.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+暗色主题把 rgba 换成深色半透明即可。未设背景图时不要全局加透明。
+
+【六、完整示例 A · 暗色毛玻璃】
+:root {
+  --color-bg: #0B0B0E;
+  --color-surface: rgba(28,28,34,0.92);
+  --color-surface-2: rgba(44,44,52,0.9);
+  --color-surface-3: rgba(52,52,60,0.85);
+  --color-text-1: #F0F0F4;
+  --color-text-2: #A6A6AF;
+  --color-text-3: #5E5E68;
+  --color-accent-strong: #DADAE2;
+  --color-accent-soft: rgba(220,220,232,0.10);
+  --color-border: rgba(255,255,255,0.10);
+  --color-hairline: rgba(255,255,255,0.08);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+}
+.glass, .record, .sheet, .settings-group { backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.sheet { background: rgba(24,24,30,0.96); }
+.switch { background: rgba(255,255,255,0.16); }
+.sheet-grabber { background: rgba(255,255,255,0.22); }
+.cal-cell .day-pct.pct-low { color: #6E6E78; }
+.cal-cell .day-pct.pct-high { color: #D6D6DE; }
+
+【七、完整示例 B · 纸感奶油】
+:root {
+  --color-bg: #F6F1E7;
+  --color-surface: #FFFDF8;
+  --color-surface-2: #F1EADC;
+  --color-surface-3: #EAE1CF;
+  --color-text-1: #3E3527;
+  --color-text-2: #7A6F5D;
+  --color-text-3: #B3A78F;
+  --color-accent-strong: #8C6F3F;
+  --color-accent-soft: rgba(140,111,63,0.10);
+  --color-border: rgba(140,111,63,0.18);
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+  --star: #C79A3B;
+}
+.cal-cell { border-radius: 10px; }
+
+【八、验收清单】
+三个标签页 × 设置弹窗 × 新增/编辑观测弹窗 × 有无背景图，逐一看：文字对比度、按钮可读、弹窗不被裁切。有问题回到对应变量或类名微调。`;
 
 // ---------- 背景图 ----------
 let _bgResolvedUrl = '';   // 已解析为可加载地址的背景图缓存
@@ -1354,8 +1462,28 @@ function renderSettings() {
 // 提醒
 // ============================================================================
 
+// 关闭提醒时彻底清理：撤销所有遗留的定时任务 + 清掉已发出的通知与桌面红点
+async function cancelPendingReminders(reason) {
+  const ids = ['reminder_daily']; // 已知固定 id（旧版本遗留）
+  try {
+    const tasks = await API.tasks.list();
+    if (Array.isArray(tasks)) {
+      tasks.forEach(t => { if (t && t.id && String(t.id).startsWith('reminder_daily')) ids.push(t.id); });
+    }
+  } catch (e) { /* 宿主不支持列出任务时，只按已知 id 清理 */ }
+  for (const id of [...new Set(ids)]) {
+    try { await API.tasks.cancel(id); } catch (e) {}
+  }
+  try { await API.notifications.markAllRead(); } catch (e) {}
+  try { await API.notifications.clearBadge(); } catch (e) {}
+  console.log('[ORBIT] 提醒已关闭，已清理遗留定时任务/通知/红点', reason || '');
+}
+
 async function scheduleReminder() {
-  if (!state.settings.reminderEnabled) return;
+  if (!state.settings.reminderEnabled) {
+    await cancelPendingReminders('reminderEnabled=false');
+    return;
+  }
 
   const [h, m] = (state.settings.reminderTime || '21:00').split(':').map(Number);
   const now = new Date();
@@ -1393,7 +1521,7 @@ async function scheduleReminder() {
       console.warn('scheduleReminder retry:', e2);
     }
   }
-  // 清理可能残留的桌面红点（仅保留通知）
+  // 开启提醒时也清一次遗留红点，保证角标干净
   try {
     await API.notifications.clearBadge();
   } catch (e) {}
@@ -1703,31 +1831,23 @@ function bindEvents() {
   $('#reminderTime').addEventListener('change', async () => {
     state.settings.reminderTime = $('#reminderTime').value || '21:00';
     await saveSettings();
-    await scheduleReminder();
-    await toast('提醒时间已更新');
+    if (state.settings.reminderEnabled) {
+      await scheduleReminder();
+      await toast('提醒时间已更新');
+    }
   });
-  $('#cssExampleBtn').addEventListener('click', async () => {
-    // 提取当前自定义 CSS 或默认样式，填入输入框
-    const current = state.settings.customCSS || '';
-    const example = current || `/* ===== ORBIT 自定义样式示例 ===== */
-/* 修改主题色 */
-:root {
-  --color-accent-strong: #7C3AED;  /* 紫罗兰强调色 */
-  --color-bg: #FAFAFA;
-}
-
-/* 调整月历格子 */
-.cal-cell {
-  border-radius: 4px;
-}
-
-/* 修改标签样式 */
-.record-tag {
-  background: rgba(124, 58, 237, 0.1);
-  color: #7C3AED;
-}`;
-    $('#customCSS').value = example;
-    await API.ui.toast('已填入示例，点「应用样式」生效');
+  // 「AI 制作指南」：把全局美化 CSS 指南整段填入输入框，复制发给任意 AI 即可生成全局主题
+  $('#cssGuideBtn').addEventListener('click', async () => {
+    const cur = $('#customCSS').value.trim();
+    if (cur) {
+      const overwrite = await API.ui.confirm({
+        title: '填入 AI 制作指南？',
+        message: '输入框里已有内容，填入指南会覆盖它；需要请先复制留底。'
+      });
+      if (!overwrite) return;
+    }
+    $('#customCSS').value = CSS_GUIDE;
+    await toast('指南已填入，全选复制发给 AI 即可');
   });
 
   $('#applyCSSBtn').addEventListener('click', async () => {
@@ -1763,7 +1883,12 @@ async function init() {
   bindEvents();
   renderAll();
   registerAITools();
-  scheduleReminder();
+  // 仅在用户开启提醒时调度；关闭状态下启动即清理遗留任务/通知/红点
+  if (state.settings.reminderEnabled) {
+    scheduleReminder();
+  } else {
+    cancelPendingReminders('init: reminderEnabled=false');
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
